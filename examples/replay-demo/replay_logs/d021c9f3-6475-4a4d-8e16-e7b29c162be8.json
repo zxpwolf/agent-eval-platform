@@ -1,0 +1,59 @@
+{
+  "trace_id": "41a0cf38-d715-48a1-bffd-6e14ab22bfba",
+  "log_id": "d021c9f3-6475-4a4d-8e16-e7b29c162be8",
+  "created_at": 1781182964.1966214,
+  "calls": [
+    {
+      "call_id": "4994b49a-ff6f-47c4-a745-316de81a6c8f",
+      "action_type": "llm_call",
+      "timestamp": 1781182964.1966393,
+      "duration_ms": 0.009298324584960938,
+      "input_data": "What is Python?",
+      "metadata": {},
+      "output_data": "Python is a programming language...",
+      "error": null,
+      "model": "gpt-4",
+      "prompt_tokens": 50,
+      "completion_tokens": 100,
+      "span_id": "span-llm-1",
+      "parent_call_id": null
+    },
+    {
+      "call_id": "46237bfb-a0ab-4ad0-85d6-45fa226a4745",
+      "action_type": "tool_call",
+      "timestamp": 1781182964.196651,
+      "duration_ms": 0.005245208740234375,
+      "input_data": "Python programming",
+      "metadata": {},
+      "output_data": "Search results about Python...",
+      "error": null,
+      "model": null,
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "span_id": "span-tool-1",
+      "parent_call_id": null
+    },
+    {
+      "call_id": "b23d9ba1-aa5a-48ca-b5bd-40fc0d2dd016",
+      "action_type": "llm_call",
+      "timestamp": 1781182964.1966615,
+      "duration_ms": 0.002384185791015625,
+      "input_data": "Summarize the search results",
+      "metadata": {},
+      "output_data": "Python is a high-level, general-purpose programming language...",
+      "error": null,
+      "model": "gpt-4",
+      "prompt_tokens": 150,
+      "completion_tokens": 80,
+      "span_id": "span-llm-2",
+      "parent_call_id": null
+    }
+  ],
+  "initial_state": {
+    "agent_type": "react",
+    "task": "web_search"
+  },
+  "final_state": {},
+  "agent_config": {},
+  "environment": {}
+}

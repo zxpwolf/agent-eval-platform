@@ -1,0 +1,9 @@
+# SDK dependencies
+pydantic>=2.0.0
+
+# Optional: for HTTP exporter
+requests>=2.28.0
+
+# Integration dependencies
+langchain-core>=0.1.0
+langgraph>=0.0.40
