@@ -16,6 +16,9 @@ class SpanType(str, Enum):
     RETRIEVER = "retriever"
     EMBEDDING = "embedding"
     FUNCTION = "function"
+    # OTel-aligned additions
+    WORKFLOW = "workflow"
+    CHAT = "chat"
 
 
 class SpanStatus(str, Enum):
@@ -58,6 +61,9 @@ class Span:
     input_data: Optional[Any] = None
     output_data: Optional[Any] = None
 
+    # OTel GenAI semantic convention (optional, for compatibility)
+    otel_operation: Optional[str] = None
+
     @property
     def duration_ms(self) -> float:
         """Get duration in milliseconds."""
@@ -67,7 +73,7 @@ class Span:
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert span to dictionary for serialization."""
-        return {
+        d = {
             "trace_id": self.trace_id,
             "span_id": self.span_id,
             "name": self.name,
@@ -93,6 +99,9 @@ class Span:
             "input_data": self.input_data,
             "output_data": self.output_data,
         }
+        if self.otel_operation is not None:
+            d["otel_operation"] = self.otel_operation
+        return d
 
 
 @dataclass

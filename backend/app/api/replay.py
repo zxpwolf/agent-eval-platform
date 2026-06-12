@@ -231,3 +231,116 @@ async def delete_replay_log(log_id: str):
         raise HTTPException(status_code=404, detail=f"Log {log_id} not found")
 
     return {"message": "Replay log deleted"}
+
+
+# ── Breakpoint & State Inspection endpoints ──────────────────
+
+
+@router.post("/{session_id}/breakpoints")
+async def add_breakpoint(session_id: str, body: Dict[str, Any]):
+    """Add a breakpoint to a replay session.
+
+    Body: {"type": "index|call_id|action_type|error|model",
+           "index": 5, "call_id": "...", "action_type": "llm_call", "model": "gpt-4"}
+    """
+    if engine is None:
+        raise HTTPException(status_code=500, detail="Replay engine not initialized")
+
+    from agent_trace.replay.breakpoints import (
+        BreakpointType,
+        get_breakpoint_manager,
+    )
+    from agent_trace.replay.models import ReplayAction
+
+    bp_type_str = body.get("type")
+    if not bp_type_str:
+        raise HTTPException(status_code=400, detail="'type' is required")
+
+    try:
+        bp_type = BreakpointType(bp_type_str)
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"Invalid breakpoint type: {bp_type_str}")
+
+    mgr = get_breakpoint_manager()
+
+    kwargs: Dict[str, Any] = {"label": body.get("label", "")}
+    if bp_type == BreakpointType.INDEX:
+        kwargs["index"] = body.get("index")
+    elif bp_type == BreakpointType.CALL_ID:
+        kwargs["call_id"] = body.get("call_id")
+    elif bp_type == BreakpointType.ACTION_TYPE:
+        action_str = body.get("action_type")
+        if action_str:
+            kwargs["action_type"] = ReplayAction(action_str)
+    elif bp_type == BreakpointType.MODEL:
+        kwargs["model"] = body.get("model")
+
+    bp = mgr.add_breakpoint(session_id, bp_type, **kwargs)
+    return bp.to_dict()
+
+
+@router.get("/{session_id}/breakpoints")
+async def list_breakpoints(session_id: str):
+    """List all breakpoints for a replay session."""
+    from agent_trace.replay.breakpoints import get_breakpoint_manager
+
+    mgr = get_breakpoint_manager()
+    bps = mgr.get_breakpoints(session_id)
+    return {"breakpoints": [bp.to_dict() for bp in bps]}
+
+
+@router.delete("/{session_id}/breakpoints/{breakpoint_id}")
+async def remove_breakpoint(session_id: str, breakpoint_id: str):
+    """Remove a breakpoint."""
+    from agent_trace.replay.breakpoints import get_breakpoint_manager
+
+    mgr = get_breakpoint_manager()
+    success = mgr.remove_breakpoint(session_id, breakpoint_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Breakpoint not found")
+    return {"message": "Breakpoint removed"}
+
+
+@router.get("/{session_id}/state")
+async def inspect_replay_state(session_id: str):
+    """Inspect the full state of a replay session at its current position."""
+    if engine is None:
+        raise HTTPException(status_code=500, detail="Replay engine not initialized")
+
+    state = engine.controller.inspect_state(session_id)
+    if not state:
+        raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
+
+    return state
+
+
+@router.post("/{session_id}/fork")
+async def fork_replay(session_id: str, from_index: Optional[int] = None):
+    """Fork a replay session at the current or specified index.
+
+    Creates a new session starting from the same position.
+    """
+    if engine is None:
+        raise HTTPException(status_code=500, detail="Replay engine not initialized")
+
+    forked = engine.controller.fork_session(session_id, from_index=from_index)
+    if not forked:
+        raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
+
+    return {
+        "session_id": forked.session_id,
+        "trace_id": forked.trace_id,
+        "status": forked.status.value,
+        "current_index": forked.current_index,
+        "forked_from": session_id,
+    }
+
+
+@router.get("/{session_id}/breakpoint-hits")
+async def get_breakpoint_hits(session_id: str):
+    """Get the breakpoint hit history for a session."""
+    from agent_trace.replay.breakpoints import get_breakpoint_manager
+
+    mgr = get_breakpoint_manager()
+    hits = mgr.get_hit_history(session_id)
+    return {"hits": [h.to_dict() for h in hits]}

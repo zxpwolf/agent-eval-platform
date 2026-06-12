@@ -10,6 +10,8 @@ export enum SpanType {
   RETRIEVER = 'retriever',
   EMBEDDING = 'embedding',
   FUNCTION = 'function',
+  WORKFLOW = 'workflow',
+  CHAT = 'chat',
 }
 
 export enum SpanStatus {
@@ -42,6 +44,9 @@ export interface Span {
   completionTokens?: number;
   totalTokens?: number;
   cost?: number;
+
+  // OTel operation name (auto-derived from spanType if not set)
+  otelOperation?: string;
 
   // Input/output
   inputData?: any;

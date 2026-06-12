@@ -1,13 +1,23 @@
 """FastAPI application for agent observability backend."""
 
 import logging
+import os
+import sys
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
+# Add SDK to Python path so agent_trace package is importable
+_sdk_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "sdk", "python")
+if _sdk_path not in sys.path:
+    sys.path.insert(0, _sdk_path)
 
-from app.api import traces, replay, alerts
+from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+
+from app.api import traces, replay, alerts, evaluations, streaming
 from app.database import TraceDatabase
+from app.db.sqlite_impl import SQLiteEvaluationRepository
+from app.errors import AppError, ConflictError, NotFoundError, ServiceError, ValidationError
 from app.services.alerts import CostAlertManager, get_alert_manager
 
 # Configure logging
@@ -32,6 +42,14 @@ async def lifespan(app: FastAPI):
     """Application lifespan events."""
     logger.info("Starting Agent Observability Backend...")
 
+    # Run migrations
+    try:
+        from app.db.migrations.runner import run_migrations
+        run_migrations(db.db_path)
+        logger.info("Database migrations applied")
+    except Exception as e:
+        logger.warning(f"Migration runner: {e}")
+
     # Set database for API routes
     traces.set_database(db)
 
@@ -52,6 +70,11 @@ async def lifespan(app: FastAPI):
     alerts.set_alert_manager(alert_mgr)
     logger.info("Cost alert manager initialized")
 
+    # Initialize evaluation repository
+    eval_repo = SQLiteEvaluationRepository(db_path=db.db_path)
+    evaluations.set_repository(eval_repo)
+    logger.info("Evaluation repository initialized")
+
     yield
     logger.info("Shutting down Agent Observability Backend...")
 
@@ -64,7 +87,53 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# Add CORS middleware
+
+# ── Global exception handlers ──────────────────────────────
+
+
+@app.exception_handler(NotFoundError)
+async def not_found_handler(request: Request, exc: NotFoundError):
+    return JSONResponse(
+        status_code=404,
+        content={"error": exc.message, "detail": exc.detail},
+    )
+
+
+@app.exception_handler(ValidationError)
+async def validation_handler(request: Request, exc: ValidationError):
+    return JSONResponse(
+        status_code=422,
+        content={"error": exc.message, "detail": exc.detail},
+    )
+
+
+@app.exception_handler(ConflictError)
+async def conflict_handler(request: Request, exc: ConflictError):
+    return JSONResponse(
+        status_code=409,
+        content={"error": exc.message, "detail": exc.detail},
+    )
+
+
+@app.exception_handler(ServiceError)
+async def service_error_handler(request: Request, exc: ServiceError):
+    return JSONResponse(
+        status_code=500,
+        content={"error": exc.message, "detail": exc.detail},
+    )
+
+
+@app.exception_handler(AppError)
+async def app_error_handler(request: Request, exc: AppError):
+    return JSONResponse(
+        status_code=500,
+        content={"error": exc.message, "detail": exc.detail},
+    )
+
+
+# ── Middleware ──────────────────────────────────────────────
+
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  # In production, restrict this to your frontend URL
@@ -77,6 +146,30 @@ app.add_middleware(
 app.include_router(traces.router)
 app.include_router(replay.router)
 app.include_router(alerts.router)
+app.include_router(evaluations.router)
+app.include_router(streaming.router)
+
+
+# ── Session endpoints (added to traces router scope) ────────
+
+
+@app.get("/api/traces/sessions")
+async def list_sessions(limit: int = 50):
+    """List distinct sessions with metadata."""
+    sessions = db._repo.list_sessions(limit=limit)
+    return {"sessions": sessions}
+
+
+@app.get("/api/traces/sessions/{session_id}")
+async def get_session_traces(session_id: str):
+    """Get all traces belonging to a session."""
+    session_traces = db._repo.get_session_traces(session_id)
+    if not session_traces:
+        raise NotFoundError("Session", session_id)
+    return {"session_id": session_id, "traces": session_traces}
+
+
+# ── Health / root ───────────────────────────────────────────
 
 
 @app.get("/health")

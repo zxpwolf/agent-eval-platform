@@ -12,6 +12,17 @@ from .models import Span, SpanEvent, SpanStatus, SpanType, Trace
 from .privacy import PIIMasker, get_masker, mask_pii, set_masker
 from .tracer import Tracer, get_tracer, set_tracer
 
+# OTel GenAI semantic conventions
+from . import otel_attributes
+from .otel_mapper import (
+    span_type_to_otel_operation,
+    otel_operation_to_span_type,
+    enrich_span_with_otel,
+)
+
+# OTLP exporter
+from .otel_exporter import OTLPExporter, OTLPExporterConfig
+
 # Replay module
 try:
     from . import replay
@@ -25,6 +36,18 @@ try:
         get_controller,
         get_engine,
         get_recorder,
+    )
+    from .replay.breakpoints import (
+        Breakpoint,
+        BreakpointManager,
+        BreakpointType,
+        BreakpointHitInfo,
+        get_breakpoint_manager,
+        break_on_index,
+        break_on_llm_calls,
+        break_on_tool_calls,
+        break_on_errors,
+        break_on_model,
     )
 except ImportError:
     # Replay module is optional
@@ -56,6 +79,14 @@ __all__ = [
     "FileExporter",
     "BatchExporter",
     "HTTPEndpointExporter",
+    # OTel
+    "otel_attributes",
+    "span_type_to_otel_operation",
+    "otel_operation_to_span_type",
+    "enrich_span_with_otel",
+    # OTLP Exporter
+    "OTLPExporter",
+    "OTLPExporterConfig",
     # Replay
     "replay",
     "ReplayEngine",
@@ -67,4 +98,15 @@ __all__ = [
     "get_engine",
     "get_controller",
     "get_recorder",
+    # Breakpoints
+    "Breakpoint",
+    "BreakpointManager",
+    "BreakpointType",
+    "BreakpointHitInfo",
+    "get_breakpoint_manager",
+    "break_on_index",
+    "break_on_llm_calls",
+    "break_on_tool_calls",
+    "break_on_errors",
+    "break_on_model",
 ]

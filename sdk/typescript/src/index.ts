@@ -23,3 +23,12 @@ export {
   HttpExporter,
   BatchExporter,
 } from './exporters';
+
+// OTel GenAI semantic conventions
+export {
+  spanTypeToOtelOperation,
+  otelOperationToSpanType,
+  enrichSpanWithOtel,
+} from './otel-mapper';
+
+export * from './otel-attributes';

@@ -87,6 +87,10 @@ class ReplayController:
 
     async def _execute_replay(self, session: ReplaySession, log: ReplayLog):
         """Execute the replay logic."""
+        # Import breakpoint manager
+        from .breakpoints import get_breakpoint_manager
+        bp_manager = get_breakpoint_manager()
+
         try:
             calls = log.calls
             start_index = session.current_index
@@ -97,6 +101,20 @@ class ReplayController:
 
                 call = calls[i]
                 session.current_index = i
+
+                # Check breakpoints before executing
+                state_snapshot = self._capture_state(session, log, i)
+                hit_info = bp_manager.evaluate_breakpoints(
+                    session.session_id, call, i, state_snapshot
+                )
+                if hit_info:
+                    # Pause at breakpoint
+                    session.status = ReplayStatus.PAUSED
+                    session.paused_at = time.time()
+                    logger.info(
+                        f"Breakpoint hit at index {i} in session {session.session_id}, pausing"
+                    )
+                    return  # Exit the replay loop; user can resume/step
 
                 # Calculate delay based on timing
                 if session.preserve_timing and i > 0:
@@ -277,6 +295,107 @@ class ReplayController:
             }
             for sid, s in self._sessions.items()
         ]
+
+    def _capture_state(
+        self,
+        session: ReplaySession,
+        log: ReplayLog,
+        current_index: int,
+    ) -> Dict[str, Any]:
+        """Capture a snapshot of the replay state at a given index."""
+        # Build call chain summary up to current index
+        calls_so_far = log.calls[:current_index]
+        llm_calls = [c for c in calls_so_far if c.action_type == ReplayAction.LLM_CALL]
+        tool_calls = [c for c in calls_so_far if c.action_type == ReplayAction.TOOL_CALL]
+
+        # Collect outputs as a simple "state" representation
+        output_chain = []
+        for c in calls_so_far:
+            output_chain.append({
+                "call_id": c.call_id,
+                "action_type": c.action_type.value,
+                "output_preview": str(c.output_data)[:200] if c.output_data else None,
+            })
+
+        return {
+            "current_index": current_index,
+            "total_calls": len(log.calls),
+            "calls_executed": len(calls_so_far),
+            "llm_calls": len(llm_calls),
+            "tool_calls": len(tool_calls),
+            "initial_state": log.initial_state,
+            "output_chain": output_chain,
+            "current_call": log.calls[current_index].to_dict() if current_index < len(log.calls) else None,
+        }
+
+    def inspect_state(self, session_id: str) -> Optional[Dict[str, Any]]:
+        """Inspect the full state of a replay session at its current position."""
+        session = self._sessions.get(session_id)
+        if not session:
+            return None
+
+        log = self._logs.get(session.log_id)
+        if not log:
+            return None
+
+        state = self._capture_state(session, log, session.current_index)
+
+        # Add session-level info
+        state["session"] = {
+            "session_id": session.session_id,
+            "trace_id": session.trace_id,
+            "status": session.status.value,
+            "speed_multiplier": session.speed_multiplier,
+            "mock_llm": session.mock_llm,
+            "mock_tools": session.mock_tools,
+        }
+
+        # Add replayed call results
+        state["replayed_results"] = session.replayed_calls[-10:]  # last 10
+
+        return state
+
+    def fork_session(
+        self,
+        session_id: str,
+        from_index: Optional[int] = None,
+    ) -> Optional[ReplaySession]:
+        """Fork a replay session at a given index.
+
+        Creates a new session that starts from the same position,
+        allowing divergent replay paths.
+        """
+        session = self._sessions.get(session_id)
+        if not session:
+            return None
+
+        log = self._logs.get(session.log_id)
+        if not log:
+            return None
+
+        fork_index = from_index if from_index is not None else session.current_index
+
+        # Create new session
+        forked = ReplaySession(
+            session_id=str(uuid.uuid4()),
+            trace_id=session.trace_id,
+            log_id=session.log_id,
+            status=ReplayStatus.PAUSED,
+            current_index=fork_index,
+            speed_multiplier=session.speed_multiplier,
+            mock_llm=session.mock_llm,
+            mock_tools=session.mock_tools,
+            preserve_timing=session.preserve_timing,
+            # Copy replayed calls up to fork point
+            replayed_calls=[
+                c for c in session.replayed_calls
+                if session.replayed_calls.index(c) < fork_index
+            ],
+        )
+
+        self._sessions[forked.session_id] = forked
+        logger.info(f"Forked session {session_id} at index {fork_index} -> {forked.session_id}")
+        return forked
 
 
 # Global controller instance

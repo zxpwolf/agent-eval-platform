@@ -35,6 +35,8 @@ ENV/
 # Database
 *.db
 *.db-journal
+*.db-shm
+*.db-wal
 
 # Trace files
 traces.jsonl
@@ -49,3 +51,7 @@ Thumbs.db
 
 # Data directory
 data/
+
+# Frontend env
+frontend/.env.local
+frontend/.env.*.local

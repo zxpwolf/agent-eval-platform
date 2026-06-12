@@ -13,6 +13,7 @@ from ..models import (
     TraceListItem,
     TraceModel,
 )
+from .streaming import notify
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +38,13 @@ async def create_trace(trace: TraceModel):
     success = db.store_trace(trace.model_dump())
     if not success:
         raise HTTPException(status_code=500, detail="Failed to store trace")
+
+    # Broadcast SSE event
+    notify("trace.created", {
+        "trace_id": trace.trace_id,
+        "name": trace.name,
+        "span_count": len(trace.spans),
+    })
 
     return trace
 
@@ -108,6 +116,9 @@ async def delete_trace(trace_id: str):
     success = db.delete_trace(trace_id)
     if not success:
         raise HTTPException(status_code=500, detail="Failed to delete trace")
+
+    # Broadcast SSE event
+    notify("trace.deleted", {"trace_id": trace_id})
 
     return {"message": "Trace deleted"}
 
