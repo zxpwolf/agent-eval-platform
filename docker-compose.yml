@@ -1,14 +1,41 @@
 version: '3.8'
 
 services:
-  backend:
-    build: ./backend
+  # ── PostgreSQL (optional - set DATABASE_URL to use) ────────
+  postgres:
+    image: postgres:16-alpine
     ports:
-      - "8000:8000"
-    volumes:
-      - ./data:/app/data
+      - "5432:5432"
     environment:
-      - DATABASE_PATH=/app/data/traces.db
+      POSTGRES_DB: ${POSTGRES_DB:-agent_eval}
+      POSTGRES_USER: ${POSTGRES_USER:-agent_eval}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-agent_eval_secret}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-agent_eval}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Backend API ──────────────────────────────────────────
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    volumes:
+      - backend_data:/app/data
+    environment:
+      - TRACES_DB_PATH=/app/data/traces.db
+      - DATABASE_URL=${DATABASE_URL:-}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-}
+      - JWT_EXPIRY_SECONDS=${JWT_EXPIRY_SECONDS:-86400}
+    depends_on:
+      postgres:
+        condition: service_healthy
+        required: false
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
@@ -16,13 +43,20 @@ services:
       retries: 3
     restart: unless-stopped
 
+  # ── Frontend Web UI ──────────────────────────────────────
   frontend:
-    build: ./frontend
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
     ports:
-      - "3000:3000"
+      - "${FRONTEND_PORT:-3000}:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8000}
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     restart: unless-stopped
 
 volumes:
-  data:
+  postgres_data:
+  backend_data:

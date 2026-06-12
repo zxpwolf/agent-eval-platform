@@ -509,8 +509,8 @@ python main.py
 - [x] Multi-user authentication
 - [x] Docker Compose deployment
 - [x] OpenAI / Anthropic SDK auto-instrumentation
-- [ ] Alert notification channels (Slack, email, webhook)
-- [ ] Custom dashboard builder (drag-and-drop widgets)
+- [x] Alert notification channels (Slack, email, webhook)
+- [x] Custom dashboard builder (drag-and-drop widgets)
 - [ ] Trace sampling and filtering
 - [ ] RBAC (role-based access control) with team/org support
 - [ ] Data retention policies and auto-cleanup

@@ -84,6 +84,12 @@ async def lifespan(app: FastAPI):
     _ensure_users_table()
     logger.info("Auth module initialized")
 
+    # Initialize notifications
+    from app.services.notifications import get_dispatcher
+    notif_dispatcher = get_dispatcher()
+    notifications.set_dispatcher(notif_dispatcher)
+    logger.info("Notification dispatcher initialized")
+
     yield
     logger.info("Shutting down Agent Observability Backend...")
 
@@ -158,6 +164,9 @@ app.include_router(alerts.router)
 app.include_router(evaluations.router)
 app.include_router(streaming.router)
 app.include_router(analytics.router)
+app.include_router(auth_routes.router)
+app.include_router(notifications.router)
+app.include_router(dashboards.router)
 
 
 # ── Session endpoints (added to traces router scope) ────────
@@ -198,6 +207,11 @@ async def root():
     }
 
 
+if __name__ == "__main__":
+    import uvicorn
+
+    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=8000)
 if __name__ == "__main__":
     import uvicorn
 
