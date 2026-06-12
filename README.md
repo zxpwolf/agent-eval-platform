@@ -371,13 +371,15 @@ agent-eval-platform/
 ## Architecture
 
 ```
-Agent App → SDK (Decorators) → Exporter → Backend API → SQLite
+Agent App → SDK (Decorators) → Exporter → Backend API → SQLite / PostgreSQL
                     ↓                          ↓
               OTLP Export              SSE Streaming → Web UI
                     ↓                          ↓
          Jaeger/Tempo/Datadog     Evaluation Runner → Results
-                    ↓
-              Replay Engine → Mock Servers → Breakpoints → Fork
+                    ↓                          ↓
+              Replay Engine → Mock Servers   Auth (JWT/API Keys)
+                    ↓                          ↓
+              Breakpoints → Fork       Analytics Dashboard
 ```
 
 ## API Endpoints
@@ -501,10 +503,17 @@ python main.py
 - [x] Replay breakpoints & state inspection
 - [x] Cost tracking and alerts
 - [x] Database abstraction with migration path
-- [ ] PostgreSQL support
-- [ ] More framework integrations (LlamaIndex, CrewAI)
-- [ ] Advanced analytics & dashboards
-- [ ] Multi-user authentication
+- [x] PostgreSQL support
+- [x] Framework integrations (LlamaIndex, CrewAI)
+- [x] Advanced analytics & dashboards
+- [x] Multi-user authentication
+- [ ] Docker Compose deployment
+- [ ] OpenAI / Anthropic SDK auto-instrumentation
+- [ ] Alert notification channels (Slack, email, webhook)
+- [ ] Custom dashboard builder (drag-and-drop widgets)
+- [ ] Trace sampling and filtering
+- [ ] RBAC (role-based access control) with team/org support
+- [ ] Data retention policies and auto-cleanup
 
 ## License
 
