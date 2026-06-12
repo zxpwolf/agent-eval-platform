@@ -508,7 +508,7 @@ python main.py
 - [x] Advanced analytics & dashboards
 - [x] Multi-user authentication
 - [x] Docker Compose deployment
-- [ ] OpenAI / Anthropic SDK auto-instrumentation
+- [x] OpenAI / Anthropic SDK auto-instrumentation
 - [ ] Alert notification channels (Slack, email, webhook)
 - [ ] Custom dashboard builder (drag-and-drop widgets)
 - [ ] Trace sampling and filtering

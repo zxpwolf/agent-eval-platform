@@ -14,7 +14,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api import traces, replay, alerts, evaluations, streaming, analytics, auth_routes
+from app.api import traces, replay, alerts, evaluations, streaming, analytics, auth_routes, notifications
 from app.database import TraceDatabase
 from app.db.sqlite_impl import SQLiteEvaluationRepository
 from app.errors import AppError, ConflictError, NotFoundError, ServiceError, ValidationError
