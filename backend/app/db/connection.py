@@ -22,17 +22,23 @@ def get_database() -> Tuple[TraceRepository, EvaluationRepository]:
 
     Supported schemes:
     - sqlite://<path>  (default)
-    - (future) postgresql://<connection_string>
+    - postgresql://<connection_string>
 
     Returns a (TraceRepository, EvaluationRepository) tuple.
     """
     database_url = os.environ.get("DATABASE_URL", "")
 
-    if database_url.startswith("postgresql://"):
-        # Future: import and instantiate PostgreSQL implementations
-        raise NotImplementedError(
-            "PostgreSQL support is not yet implemented. "
-            "Set DATABASE_URL to sqlite://<path> or leave unset."
+    if database_url.startswith("postgresql://") or database_url.startswith("postgres://"):
+        from .postgres_impl import PostgresEvaluationRepository, PostgresTraceRepository
+
+        # Share a single connection pool between both repositories
+        from .postgres_impl import _create_pool
+
+        pool = _create_pool(database_url)
+        logger.info("Using PostgreSQL database")
+        return (
+            PostgresTraceRepository(database_url=database_url, pool=pool),
+            PostgresEvaluationRepository(database_url=database_url, pool=pool),
         )
 
     # Default: SQLite
