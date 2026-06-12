@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { listTraces, getStats, type TraceListItem, type StatsResponse } from '@/lib/api'
 import { formatDuration, formatTokens, formatCost, formatRelativeTime } from '@/lib/utils'
-import { Play, BarChart3, Trash2, RefreshCw } from 'lucide-react'
+import { Play, BarChart3, Trash2, RefreshCw, LineChart } from 'lucide-react'
 
 export default function Home() {
   const [traces, setTraces] = useState<TraceListItem[]>([])

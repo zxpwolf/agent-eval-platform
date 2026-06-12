@@ -14,7 +14,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api import traces, replay, alerts, evaluations, streaming
+from app.api import traces, replay, alerts, evaluations, streaming, analytics
 from app.database import TraceDatabase
 from app.db.sqlite_impl import SQLiteEvaluationRepository
 from app.errors import AppError, ConflictError, NotFoundError, ServiceError, ValidationError
@@ -148,6 +148,7 @@ app.include_router(replay.router)
 app.include_router(alerts.router)
 app.include_router(evaluations.router)
 app.include_router(streaming.router)
+app.include_router(analytics.router)
 
 
 # ── Session endpoints (added to traces router scope) ────────
@@ -188,6 +189,10 @@ async def root():
     }
 
 
+if __name__ == "__main__":
+    import uvicorn
+
+    uvicorn.run(app, host="0.0.0.0", port=8000)
 if __name__ == "__main__":
     import uvicorn
 
