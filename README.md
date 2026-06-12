@@ -12,14 +12,17 @@ Open-source observability, evaluation, and replay platform for AI Agents. Track,
 - **Replay Breakpoints**: Pause on specific call indices, action types, errors, or custom conditions
 - **State Inspection & Fork**: Inspect replay state at any point and fork into divergent execution paths
 - **Real-time Streaming**: SSE-based live trace streaming for dashboard updates without polling
+- **Analytics Dashboard**: Time-series, model cost, latency, error rate, and span type analytics
 - **Session & Conversation View**: Group traces by session with timeline visualization
 - **Trace Comparison**: Side-by-side comparison with delta metrics for duration, tokens, and cost
+- **Multi-user Authentication**: JWT-based auth with API keys, registration, and admin roles
+- **PostgreSQL Support**: Production-ready PostgreSQL backend with connection pooling and JSONB
 - **Cost Tracking & Alerts**: Token usage tracking with configurable cost alerts
 - **PII Masking**: Automatic detection and masking of sensitive data in traces
-- **LangGraph Integration**: Seamless integration with LangChain/LangGraph agents
+- **Framework Integrations**: LangGraph, LlamaIndex, and CrewAI callback handlers
 - **Mock Servers**: Simulate LLM and tool responses without API costs
 - **Low Overhead**: Async batch exporting with <5% performance impact
-- **SQLite + Migration Path**: Lightweight storage with schema migrations for PostgreSQL readiness
+- **SQLite + PostgreSQL**: Lightweight storage with schema migrations and dual database support
 
 ## Quick Start
 
@@ -299,8 +302,10 @@ agent-eval-platform/
 │   │       │   ├── controller.py    # Replay controller (play/pause/step/fork)
 │   │       │   ├── breakpoints.py   # Breakpoint system (6 types)
 │   │       │   └── engine.py        # Replay engine
-│   │       └── integrations/
-│   │           └── langgraph.py     # LangGraph integration
+│   │       └── integrations/        # Framework integrations (lazy-loaded)
+│   │           ├── langgraph.py     # LangChain/LangGraph callback handler
+│   │           ├── llamaindex.py    # LlamaIndex event handler
+│   │           └── crewai.py        # CrewAI crew/agent/task tracer
 │   └── typescript/
 │       └── src/
 │           ├── models.ts            # Data models (aligned with Python SDK)
@@ -311,13 +316,15 @@ agent-eval-platform/
 │           └── otel-mapper.ts       # SpanType ↔ OTel operation mapping
 ├── backend/
 │   ├── app/
+│   │   ├── auth.py                 # JWT auth + password hashing + API keys
 │   │   ├── database.py             # Legacy DB wrapper
 │   │   ├── errors.py               # Custom exceptions (NotFound, Validation, etc.)
 │   │   ├── models.py               # Pydantic models
 │   │   ├── db/                     # Database abstraction layer
 │   │   │   ├── base.py             # Abstract TraceRepository + EvaluationRepository
 │   │   │   ├── sqlite_impl.py      # SQLite implementations
-│   │   │   ├── connection.py       # Connection factory
+│   │   │   ├── postgres_impl.py    # PostgreSQL implementations (psycopg2, JSONB)
+│   │   │   ├── connection.py       # Connection factory (auto-detect SQLite/PostgreSQL)
 │   │   │   └── migrations/         # Schema migration runner
 │   │   │       ├── runner.py
 │   │   │       └── versions/       # Migration files (001-003)
@@ -325,6 +332,8 @@ agent-eval-platform/
 │   │   │   ├── traces.py           # Trace API + SSE notifications
 │   │   │   ├── replay.py           # Replay API + breakpoints + state + fork
 │   │   │   ├── evaluations.py      # Evaluation CRUD + runs + comparison
+│   │   │   ├── analytics.py        # Time-series, model cost, latency, errors
+│   │   │   ├── auth_routes.py      # Register, login, API keys, token refresh
 │   │   │   ├── streaming.py        # SSE streaming endpoint
 │   │   │   └── alerts.py           # Cost alert API
 │   │   └── services/
@@ -334,6 +343,8 @@ agent-eval-platform/
 ├── frontend/
 │   ├── app/
 │   │   ├── page.tsx                # Dashboard (traces list + stats)
+│   │   ├── login/page.tsx          # Login / register page
+│   │   ├── analytics/page.tsx      # Analytics dashboard (charts + tables)
 │   │   ├── traces/
 │   │   │   ├── [id]/page.tsx       # Trace detail (span tree + timeline)
 │   │   │   └── compare/page.tsx    # Trace comparison
@@ -418,6 +429,26 @@ Agent App → SDK (Decorators) → Exporter → Backend API → SQLite
 - `GET /api/evaluations/runs/{id}/results` - Get run results
 - `POST /api/evaluations/runs/{id}/cancel` - Cancel run
 - `POST /api/evaluations/compare` - Compare two runs
+
+### Analytics
+- `GET /api/analytics/timeseries` - Time-series data (hour/day/week granularity)
+- `GET /api/analytics/models` - Per-model cost, tokens, and latency breakdown
+- `GET /api/analytics/latency` - Latency stats by span type (avg/min/max)
+- `GET /api/analytics/errors` - Error rate, breakdown by type, recent errors
+- `GET /api/analytics/top-traces` - Top traces by cost, latency, or tokens
+- `GET /api/analytics/span-types` - Span type distribution with percentages
+
+### Authentication
+- `POST /api/auth/register` - Register new user (returns JWT token)
+- `POST /api/auth/login` - Login with username/password (returns JWT token)
+- `GET /api/auth/me` - Get current user profile
+- `GET /api/auth/users` - List all users (admin only)
+- `POST /api/auth/refresh` - Refresh JWT token
+- `POST /api/auth/api-keys` - Create API key
+- `GET /api/auth/api-keys` - List API keys
+- `DELETE /api/auth/api-keys/{id}` - Delete API key
+
+Auth methods: `Authorization: Bearer <jwt>` or `X-API-Key: <key>`
 
 ## Development
 
