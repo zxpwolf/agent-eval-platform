@@ -512,7 +512,7 @@ python main.py
 - [x] Alert notification channels (Slack, email, webhook)
 - [x] Custom dashboard builder (drag-and-drop widgets)
 - [x] Trace sampling and filtering
-- [ ] RBAC (role-based access control) with team/org support
+- [x] RBAC (role-based access control) with team/org support
 - [ ] Data retention policies and auto-cleanup
 
 ## License
