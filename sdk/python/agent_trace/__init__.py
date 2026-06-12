@@ -23,6 +23,9 @@ from .otel_mapper import (
 # OTLP exporter
 from .otel_exporter import OTLPExporter, OTLPExporterConfig
 
+# Framework integrations (lazy-loaded to avoid hard dependencies)
+from .integrations.crewai import CrewAITraceHandler, setup_crewai_tracing
+
 # Replay module
 try:
     from . import replay
@@ -87,6 +90,9 @@ __all__ = [
     # OTLP Exporter
     "OTLPExporter",
     "OTLPExporterConfig",
+    # Framework Integrations
+    "CrewAITraceHandler",
+    "setup_crewai_tracing",
     # Replay
     "replay",
     "ReplayEngine",
