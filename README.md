@@ -1,17 +1,25 @@
 # Agent Observability
 
-Open-source observability and replay platform for AI Agents. Track, debug, and optimize your agent applications with minimal instrumentation.
+Open-source observability, evaluation, and replay platform for AI Agents. Track, debug, evaluate, and optimize your agent applications with full OpenTelemetry GenAI compatibility.
 
 ## Features
 
 - **Automatic Tracing**: Capture LLM calls, tool executions, and agent decision chains
+- **OTel GenAI Semantic Conventions**: Full compatibility with OpenTelemetry GenAI standards
+- **OTLP Export**: Send traces to any OTLP-compatible backend (Jaeger, Grafana Tempo, Honeycomb, Datadog)
+- **Evaluation Framework**: Dataset management, heuristic/LLM-judge/custom evaluators, scoring pipeline
+- **Deterministic Replay**: Record and replay agent executions with breakpoints and state inspection
+- **Replay Breakpoints**: Pause on specific call indices, action types, errors, or custom conditions
+- **State Inspection & Fork**: Inspect replay state at any point and fork into divergent execution paths
+- **Real-time Streaming**: SSE-based live trace streaming for dashboard updates without polling
+- **Session & Conversation View**: Group traces by session with timeline visualization
+- **Trace Comparison**: Side-by-side comparison with delta metrics for duration, tokens, and cost
+- **Cost Tracking & Alerts**: Token usage tracking with configurable cost alerts
+- **PII Masking**: Automatic detection and masking of sensitive data in traces
 - **LangGraph Integration**: Seamless integration with LangChain/LangGraph agents
-- **Deterministic Replay**: Record and replay agent executions for debugging and testing
 - **Mock Servers**: Simulate LLM and tool responses without API costs
 - **Low Overhead**: Async batch exporting with <5% performance impact
-- **SQLite Storage**: Lightweight storage perfect for local development
-- **REST API**: FastAPI backend with comprehensive endpoints
-- **Comparison Mode**: Compare multiple replays to identify differences
+- **SQLite + Migration Path**: Lightweight storage with schema migrations for PostgreSQL readiness
 
 ## Quick Start
 
@@ -67,9 +75,114 @@ uvicorn main:app --reload
 
 Visit http://localhost:8000/docs for API documentation.
 
+### 5. Run Frontend (optional)
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Visit http://localhost:3000 for the web dashboard.
+
+## OTel GenAI Semantic Conventions
+
+Traces are automatically enriched with OTel GenAI semantic convention attributes:
+
+```python
+from agent_trace import SpanType
+from agent_trace.otel_mapper import span_type_to_otel_operation, enrich_span_with_otel
+
+# SpanType → OTel operation mapping
+span_type_to_otel_operation(SpanType.LLM)       # → "chat"
+span_type_to_otel_operation(SpanType.TOOL)       # → "execute_tool"
+span_type_to_otel_operation(SpanType.AGENT)      # → "invoke_agent"
+span_type_to_otel_operation(SpanType.WORKFLOW)   # → "invoke_workflow"
+span_type_to_otel_operation(SpanType.RETRIEVER)  # → "retrieve"
+
+# Enrich a span with OTel attributes
+enriched = enrich_span_with_otel(span)
+# Adds: gen_ai.operation.name, gen_ai.request.model, gen_ai.usage.input_tokens, etc.
+```
+
+## OTLP Export
+
+Export traces to any OTLP-compatible backend:
+
+```python
+from agent_trace.otel_exporter import OTLPExporter, OTLPExporterConfig
+
+config = OTLPExporterConfig(
+    endpoint="http://localhost:4318/v1/traces",
+    resource_attributes={"service.name": "my-agent"},
+)
+exporter = OTLPExporter(config)
+
+# Export a trace
+exporter.export_trace(trace)
+
+# Batch export (auto-flushes when batch is full or timeout)
+exporter.batch_export(trace)
+exporter.flush()
+```
+
+## Evaluation Framework
+
+### Creating Datasets and Evaluators
+
+```python
+from agent_trace.eval import (
+    EvaluationPipeline,
+    RegexMatchEvaluator,
+    ContainsEvaluator,
+    LLMJudgeEvaluator,
+    CustomEvaluator,
+)
+
+# Heuristic evaluators
+contains = ContainsEvaluator(value="expected keyword")
+regex = RegexMatchEvaluator(pattern=r"\d{3}-\d{4}")
+exact = ExactMatchEvaluator(expected="exact output")
+
+# LLM-as-judge evaluator
+judge = LLMJudgeEvaluator(
+    rubric="Rate the response quality from 0-1",
+    judge_fn=lambda prompt: call_my_llm(prompt),
+)
+
+# Custom evaluator
+custom = CustomEvaluator(fn=lambda input, expected, actual: {
+    "score": 0.9, "passed": True, "reasoning": "Custom check passed"
+})
+
+# Run evaluation pipeline
+pipeline = EvaluationPipeline(evaluators=[contains, judge])
+results = pipeline.run(
+    inputs=["input 1", "input 2"],
+    expected_outputs=["expected 1", "expected 2"],
+    actual_outputs=["actual 1", "actual 2"],
+)
+```
+
+### Evaluation API
+
+```
+POST   /api/evaluations/datasets          - Create dataset
+GET    /api/evaluations/datasets          - List datasets
+GET    /api/evaluations/datasets/{id}     - Get dataset with items
+POST   /api/evaluations/datasets/{id}/items - Add items
+POST   /api/evaluations/evaluators        - Create evaluator
+GET    /api/evaluations/evaluators        - List evaluators
+POST   /api/evaluations/runs              - Start evaluation run
+GET    /api/evaluations/runs              - List runs
+GET    /api/evaluations/runs/{id}         - Get run with results
+POST   /api/evaluations/runs/{id}/cancel  - Cancel run
+POST   /api/evaluations/compare           - Compare two runs
+```
+
 ## Replay Engine
 
-The replay engine allows you to record agent executions and replay them deterministically:
+### Basic Replay
 
 ```python
 from agent_trace.replay import get_engine
@@ -90,47 +203,157 @@ session_id = await engine.replay_trace(
 comparison = engine.compare_replays(session_1, session_2)
 ```
 
-### Replay API Endpoints
+### Breakpoints
 
-- `POST /api/replay/export/{trace_id}` - Export trace as replay log
-- `POST /api/replay/start` - Start a replay session
-- `POST /api/replay/{session_id}/pause` - Pause replay
-- `POST /api/replay/{session_id}/resume` - Resume replay
-- `POST /api/replay/{session_id}/step` - Step through replay
-- `GET /api/replay/{session_id}/status` - Get replay status
-- `POST /api/replay/compare` - Compare two replays
+```python
+from agent_trace.replay import get_breakpoint_manager
+from agent_trace.replay.breakpoints import (
+    break_on_llm_calls,
+    break_on_tool_calls,
+    break_on_errors,
+    break_on_index,
+    break_on_model,
+    BreakpointType,
+)
+
+mgr = get_breakpoint_manager()
+
+# Convenience functions
+break_on_llm_calls(session_id)
+break_on_errors(session_id)
+break_on_index(session_id, index=5)
+break_on_model(session_id, model="gpt-4")
+
+# Custom breakpoint
+mgr.add_breakpoint(
+    session_id,
+    BreakpointType.ACTION_TYPE,
+    action_type=ReplayAction.TOOL_CALL,
+    label="Stop at tools",
+)
+
+# Register hit callback
+mgr.on_hit(session_id, lambda hit: print(f"Breakpoint hit: {hit.call.call_id}"))
+```
+
+### State Inspection & Forking
+
+```python
+# Inspect state at current position
+state = controller.inspect_state(session_id)
+# Returns: current call, call chain, token counts, output history
+
+# Fork session at any point
+forked = controller.fork_session(session_id, from_index=5)
+# Creates a new session starting from the same position
+```
+
+## Real-time Streaming
+
+The backend supports SSE (Server-Sent Events) for real-time trace updates:
+
+```
+GET /api/stream/traces  # SSE endpoint
+```
+
+Events:
+- `trace.created` - New trace stored
+- `trace.deleted` - Trace deleted
+- `eval.run.progress` - Evaluation run progress
+- `eval.run.completed` - Evaluation run finished
+
+Frontend React hooks are available in `frontend/lib/sse.ts`:
+
+```typescript
+import { useTraceCreated, useTraceStreamCallback } from '@/lib/sse'
+
+// Auto-refresh list when new traces arrive
+useTraceStreamCallback(() => loadData(), ['trace.created', 'trace.deleted'])
+```
 
 ## Project Structure
 
 ```
-agent-observability/
+agent-eval-platform/
 ├── sdk/
-│   └── python/
-│       └── agent_trace/
-│           ├── __init__.py
-│           ├── models.py        # Data models
-│           ├── tracer.py        # Core tracer
-│           ├── decorators.py    # @trace decorators
-│           ├── exporters.py     # Data exporters
-│           ├── integrations/
-│           │   └── langgraph.py # LangGraph integration
-│           └── replay/          # Replay engine
-│               ├── models.py    # Replay data models
-│               ├── recorder.py  # Execution recorder
-│               ├── mock_server.py # Mock LLM/tool servers
-│               ├── controller.py # Replay controller
-│               └── engine.py    # Replay engine
+│   ├── python/
+│   │   └── agent_trace/
+│   │       ├── __init__.py          # Package exports (45 items)
+│   │       ├── models.py            # Data models (Span, Trace, SpanType)
+│   │       ├── tracer.py            # Core tracer
+│   │       ├── decorators.py        # @trace decorators
+│   │       ├── exporters.py         # Data exporters (Console, File, HTTP, Batch)
+│   │       ├── otel_attributes.py   # OTel GenAI attribute constants
+│   │       ├── otel_mapper.py       # SpanType ↔ OTel operation mapping
+│   │       ├── otel_exporter.py       # OTLP trace exporter
+│   │       ├── eval/                # Evaluation framework
+│   │       │   ├── base.py          # Evaluator ABC + EvaluationResult
+│   │       │   ├── heuristic.py     # Regex, Contains, JsonValid, etc.
+│   │       │   ├── llm_judge.py     # LLM-as-judge evaluator
+│   │       │   ├── custom.py        # Custom callable evaluator
+│   │       │   └── pipeline.py      # EvaluationPipeline orchestrator
+│   │       ├── replay/              # Replay engine
+│   │       │   ├── models.py        # ReplayLog, RecordedCall, ReplaySession
+│   │       │   ├── recorder.py      # Execution recorder
+│   │       │   ├── mock_server.py   # Mock LLM/tool servers
+│   │       │   ├── controller.py    # Replay controller (play/pause/step/fork)
+│   │       │   ├── breakpoints.py   # Breakpoint system (6 types)
+│   │       │   └── engine.py        # Replay engine
+│   │       └── integrations/
+│   │           └── langgraph.py     # LangGraph integration
+│   └── typescript/
+│       └── src/
+│           ├── models.ts            # Data models (aligned with Python SDK)
+│           ├── tracer.ts            # Core tracer
+│           ├── instrumentation.ts   # Auto-instrumentation helpers
+│           ├── exporters.ts         # Data exporters
+│           ├── otel-attributes.ts   # OTel GenAI attribute constants
+│           └── otel-mapper.ts       # SpanType ↔ OTel operation mapping
 ├── backend/
 │   ├── app/
-│   │   ├── database.py         # SQLite storage
-│   │   ├── models.py           # Pydantic models
-│   │   └── api/
-│   │       ├── traces.py       # Trace API
-│   │       └── replay.py       # Replay API
-│   └── main.py                 # FastAPI app
+│   │   ├── database.py             # Legacy DB wrapper
+│   │   ├── errors.py               # Custom exceptions (NotFound, Validation, etc.)
+│   │   ├── models.py               # Pydantic models
+│   │   ├── db/                     # Database abstraction layer
+│   │   │   ├── base.py             # Abstract TraceRepository + EvaluationRepository
+│   │   │   ├── sqlite_impl.py      # SQLite implementations
+│   │   │   ├── connection.py       # Connection factory
+│   │   │   └── migrations/         # Schema migration runner
+│   │   │       ├── runner.py
+│   │   │       └── versions/       # Migration files (001-003)
+│   │   ├── api/
+│   │   │   ├── traces.py           # Trace API + SSE notifications
+│   │   │   ├── replay.py           # Replay API + breakpoints + state + fork
+│   │   │   ├── evaluations.py      # Evaluation CRUD + runs + comparison
+│   │   │   ├── streaming.py        # SSE streaming endpoint
+│   │   │   └── alerts.py           # Cost alert API
+│   │   └── services/
+│   │       ├── alerts.py           # Cost alert manager
+│   │       └── evaluation_runner.py # Background eval runner
+│   └── main.py                     # FastAPI app + error handlers + lifespan
+├── frontend/
+│   ├── app/
+│   │   ├── page.tsx                # Dashboard (traces list + stats)
+│   │   ├── traces/
+│   │   │   ├── [id]/page.tsx       # Trace detail (span tree + timeline)
+│   │   │   └── compare/page.tsx    # Trace comparison
+│   │   ├── sessions/
+│   │   │   └── [id]/page.tsx       # Session/conversation view
+│   │   └── evaluations/
+│   │       ├── page.tsx            # Evaluation dashboard
+│   │       ├── datasets/[id]/page.tsx # Dataset detail + item management
+│   │       └── runs/[id]/page.tsx  # Eval run results + progress
+│   ├── components/
+│   │   ├── SpanTree.tsx            # Span tree visualization
+│   │   ├── TimelineView.tsx        # Timeline visualization
+│   │   └── ReplayPlayer.tsx        # Replay controls
+│   └── lib/
+│       ├── api.ts                  # Typed API client
+│       ├── utils.ts                # Formatting utilities
+│       └── sse.ts                  # SSE client + React hooks
 ├── examples/
-│   ├── langgraph-agent/        # LangGraph tracing example
-│   └── replay-demo/            # Replay engine demo
+│   ├── langgraph-agent/            # LangGraph tracing example
+│   └── replay-demo/                # Replay engine demo
 └── docker-compose.yml
 ```
 
@@ -138,18 +361,13 @@ agent-observability/
 
 ```
 Agent App → SDK (Decorators) → Exporter → Backend API → SQLite
-                                    ↓
-                              Replay Engine → Mock Servers
-                                    ↓
-                              Web UI (coming soon)
+                    ↓                          ↓
+              OTLP Export              SSE Streaming → Web UI
+                    ↓                          ↓
+         Jaeger/Tempo/Datadog     Evaluation Runner → Results
+                    ↓
+              Replay Engine → Mock Servers → Breakpoints → Fork
 ```
-
-## Examples
-
-See the `examples/` directory for complete examples:
-
-- `langgraph-agent/main.py`: LangGraph agent with tracing
-- `replay-demo/main.py`: Replay engine demonstration
 
 ## API Endpoints
 
@@ -159,17 +377,47 @@ See the `examples/` directory for complete examples:
 - `GET /api/traces/{id}` - Get trace details
 - `DELETE /api/traces/{id}` - Delete a trace
 - `GET /api/traces/stats/summary` - Get statistics
+- `GET /api/traces/sessions` - List sessions
+- `GET /api/traces/sessions/{id}` - Get session traces
 
 ### Replay
 - `POST /api/replay/export/{trace_id}` - Export trace as replay log
 - `POST /api/replay/start` - Start a replay session
-- `POST /api/replay/{session_id}/pause` - Pause replay
-- `POST /api/replay/{session_id}/resume` - Resume replay
-- `POST /api/replay/{session_id}/step` - Execute single step
-- `POST /api/replay/{session_id}/stop` - Stop replay
-- `GET /api/replay/{session_id}/status` - Get replay status
+- `POST /api/replay/{id}/pause` - Pause replay
+- `POST /api/replay/{id}/resume` - Resume replay
+- `POST /api/replay/{id}/step` - Execute single step
+- `POST /api/replay/{id}/stop` - Stop replay
+- `GET /api/replay/{id}/status` - Get replay status
 - `POST /api/replay/compare` - Compare two replays
 - `GET /api/replay/logs` - List replay logs
+- `POST /api/replay/{id}/breakpoints` - Add breakpoint
+- `GET /api/replay/{id}/breakpoints` - List breakpoints
+- `DELETE /api/replay/{id}/breakpoints/{bp_id}` - Remove breakpoint
+- `GET /api/replay/{id}/state` - Inspect replay state
+- `POST /api/replay/{id}/fork` - Fork replay session
+- `GET /api/replay/{id}/breakpoint-hits` - Get hit history
+
+### Streaming
+- `GET /api/stream/traces` - SSE endpoint for real-time events
+
+### Evaluations
+- `POST /api/evaluations/datasets` - Create dataset
+- `GET /api/evaluations/datasets` - List datasets
+- `GET /api/evaluations/datasets/{id}` - Get dataset with items
+- `PUT /api/evaluations/datasets/{id}` - Update dataset
+- `DELETE /api/evaluations/datasets/{id}` - Delete dataset
+- `POST /api/evaluations/datasets/{id}/items` - Add items
+- `DELETE /api/evaluations/datasets/{id}/items/{item_id}` - Remove item
+- `POST /api/evaluations/evaluators` - Create evaluator
+- `GET /api/evaluations/evaluators` - List evaluators
+- `GET /api/evaluations/evaluators/{id}` - Get evaluator
+- `DELETE /api/evaluations/evaluators/{id}` - Delete evaluator
+- `POST /api/evaluations/runs` - Start evaluation run (background)
+- `GET /api/evaluations/runs` - List runs
+- `GET /api/evaluations/runs/{id}` - Get run with results
+- `GET /api/evaluations/runs/{id}/results` - Get run results
+- `POST /api/evaluations/runs/{id}/cancel` - Cancel run
+- `POST /api/evaluations/compare` - Compare two runs
 
 ## Development
 
@@ -190,6 +438,13 @@ pip install -r requirements.txt
 uvicorn main:app --reload
 ```
 
+Start frontend:
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
 Run examples:
 ```bash
 cd examples/langgraph-agent
@@ -206,11 +461,19 @@ python main.py
 - [x] SQLite storage
 - [x] REST API
 - [x] Replay engine
-- [ ] Web UI (Next.js)
-- [ ] TypeScript SDK
+- [x] Web UI (Next.js)
+- [x] TypeScript SDK
+- [x] OTel GenAI semantic conventions
+- [x] OTLP exporter
+- [x] Evaluation framework
+- [x] Real-time SSE streaming
+- [x] Replay breakpoints & state inspection
+- [x] Cost tracking and alerts
+- [x] Database abstraction with migration path
+- [ ] PostgreSQL support
 - [ ] More framework integrations (LlamaIndex, CrewAI)
-- [ ] Cost tracking and alerts
-- [ ] Advanced analytics
+- [ ] Advanced analytics & dashboards
+- [ ] Multi-user authentication
 
 ## License
 
