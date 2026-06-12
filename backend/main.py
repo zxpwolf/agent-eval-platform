@@ -14,7 +14,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api import traces, replay, alerts, evaluations, streaming, analytics
+from app.api import traces, replay, alerts, evaluations, streaming, analytics, auth_routes
 from app.database import TraceDatabase
 from app.db.sqlite_impl import SQLiteEvaluationRepository
 from app.errors import AppError, ConflictError, NotFoundError, ServiceError, ValidationError
@@ -74,6 +74,15 @@ async def lifespan(app: FastAPI):
     eval_repo = SQLiteEvaluationRepository(db_path=db.db_path)
     evaluations.set_repository(eval_repo)
     logger.info("Evaluation repository initialized")
+
+    # Initialize analytics
+    analytics.set_database(db)
+    logger.info("Analytics module initialized")
+
+    # Initialize auth tables
+    from app.auth import _ensure_users_table
+    _ensure_users_table()
+    logger.info("Auth module initialized")
 
     yield
     logger.info("Shutting down Agent Observability Backend...")
@@ -193,7 +202,4 @@ if __name__ == "__main__":
     import uvicorn
 
     uvicorn.run(app, host="0.0.0.0", port=8000)
-if __name__ == "__main__":
-    import uvicorn
-
     uvicorn.run(app, host="0.0.0.0", port=8000)
