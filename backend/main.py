@@ -90,6 +90,17 @@ async def lifespan(app: FastAPI):
     notifications.set_dispatcher(notif_dispatcher)
     logger.info("Notification dispatcher initialized")
 
+    # Initialize dashboards
+    from app.services.dashboards import _ensure_dashboards_table
+    _ensure_dashboards_table()
+    logger.info("Dashboards module initialized")
+
+    # Initialize sampling engine
+    from app.services.sampling import _ensure_sampling_table, get_sampling_engine
+    _ensure_sampling_table()
+    sampling_engine = get_sampling_engine()
+    logger.info("Sampling engine initialized (%d rules loaded)", len(sampling_engine._rules))
+
     yield
     logger.info("Shutting down Agent Observability Backend...")
 
@@ -211,4 +222,5 @@ if __name__ == "__main__":
     import uvicorn
 
     uvicorn.run(app, host="0.0.0.0", port=8000)
+
 

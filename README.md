@@ -511,7 +511,7 @@ python main.py
 - [x] OpenAI / Anthropic SDK auto-instrumentation
 - [x] Alert notification channels (Slack, email, webhook)
 - [x] Custom dashboard builder (drag-and-drop widgets)
-- [ ] Trace sampling and filtering
+- [x] Trace sampling and filtering
 - [ ] RBAC (role-based access control) with team/org support
 - [ ] Data retention policies and auto-cleanup
 
